@@ -1,9 +1,16 @@
 const SEARX_INSTANCES = [
-  "https://searx.be",
-  "https://searx.tiekoetter.com",
-  "https://searx.priv.au",
-  "https://searx.baczek.me",
-  "https://searx.rodeo",
+  "https://priv.au",
+  "https://search.hbubli.cc",
+  "https://searxng.website",
+  "https://searxng.deggo.fyi",
+  "https://search.yuri.llc",
+  "https://searxng.shreven.org",
+  "https://search.mdosch.de",
+  "https://search.inetol.net",
+  "https://xka.cz",
+  "https://anonsearch.win",
+  "https://libresearch.space",
+  "https://baresearch.org",
 ];
 
 function getCurrentDateString() {
@@ -16,48 +23,48 @@ function getCurrentDateString() {
   });
 }
 
-async function fetchFromSearx(query) {
-  for (const base of SEARX_INSTANCES) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
-
-      const url = `${base}/search?q=${encodeURIComponent(query)}&format=json`;
-      const res = await fetch(url, {
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; HubbyAI/1.0)" },
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-      if (!res.ok) continue;
-
-      const data = await res.json();
-      if (data.results && data.results.length > 0) {
-        return data.results
-          .slice(0, 4)
-          .map((r) => ({ title: r.title, content: r.content || "" }));
-      }
-    } catch (e) {
-      continue;
+async function tryInstance(base, query) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 4000);
+  try {
+    const url = `${base}/search?q=${encodeURIComponent(query)}&format=json`;
+    const res = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; HubbyAI/1.0)" },
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error("bad status " + res.status);
+    const data = await res.json();
+    if (data.results && data.results.length > 0) {
+      return data.results
+        .slice(0, 4)
+        .map((r) => ({ title: r.title, content: r.content || "" }));
     }
+    throw new Error("no results");
+  } finally {
+    clearTimeout(timeoutId);
   }
-  return [];
+}
+
+async function fetchFromSearx(query) {
+  const attempts = SEARX_INSTANCES.map((base) => tryInstance(base, query));
+  try {
+    return await Promise.any(attempts);
+  } catch (e) {
+    return [];
+  }
 }
 
 async function fetchFromDuckDuckGo(query) {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 4000);
-
     const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(
       query
     )}&format=json&no_html=1&skip_disambig=1`;
     const res = await fetch(url, { signal: controller.signal });
     clearTimeout(timeoutId);
-
     if (!res.ok) return [];
     const data = await res.json();
-
     const results = [];
     if (data.AbstractText) {
       results.push({ title: data.Heading || query, content: data.AbstractText });
@@ -74,9 +81,7 @@ async function fetchFromDuckDuckGo(query) {
 async function fetchSearchResults(query) {
   const searxResults = await fetchFromSearx(query);
   if (searxResults.length > 0) return searxResults;
-
-  const ddgResults = await fetchFromDuckDuckGo(query);
-  return ddgResults;
+  return await fetchFromDuckDuckGo(query);
 }
 
 export default {
@@ -106,7 +111,6 @@ export default {
 
     try {
       const { message } = await request.json();
-
       const searchResults = await fetchSearchResults(message);
 
       let searchContext = "";
