@@ -110,7 +110,20 @@ export default {
     }
 
     try {
-      const { message } = await request.json();
+      const body = await request.json();
+      const message = body.message;
+
+      const rawHistory = Array.isArray(body.history) ? body.history : [];
+      const history = rawHistory
+        .filter(
+          (m) =>
+            m &&
+            (m.role === "user" || m.role === "assistant") &&
+            typeof m.content === "string"
+        )
+        .slice(-20)
+        .map((m) => ({ role: m.role, content: m.content }));
+
       const searchResults = await fetchSearchResults(message);
 
       let searchContext = "";
@@ -130,6 +143,7 @@ export default {
       const response = await env.AI.run("@cf/google/gemma-4-26b-a4b-it", {
         messages: [
           { role: "system", content: systemPrompt },
+          ...history,
           { role: "user", content: message },
         ],
         chat_template_kwargs: { enable_thinking: false },
