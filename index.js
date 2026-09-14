@@ -112,7 +112,7 @@ export default {
           success: false,
           reply: "Server error: " + err.message,
         }),
-        {
+        { 
           status: 500,
           headers: {
             "Content-Type": "application/json",
